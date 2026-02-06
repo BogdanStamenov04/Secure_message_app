@@ -1,0 +1,18 @@
+[tool.mypy]
+files = ["src"]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+# Специални настройки за игнориране на customtkinter и други без типове
+[[tool.mypy.overrides]]
+module = ["customtkinter", "PIL.*", "socket", "threading"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing"
+
+[tool.pylint.master]
+ignore-paths = ["tests"]
