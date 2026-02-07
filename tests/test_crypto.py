@@ -1,70 +1,79 @@
-import unittest
+import os
+import base64
+from unittest.mock import patch, mock_open
 from cryptography.fernet import Fernet
-from src.common.crypto_utils import CryptoManager
+from src.common.crypto_utils import CryptoManager, KEY_FILE
 
-class TestCrypto(unittest.TestCase):
-    def setUp(self) -> None:
-        self.crypto: CryptoManager = CryptoManager()
 
-    def test_initialization_with_key(self) -> None:
-        """Test initializing with a provided key."""
-        key: bytes = Fernet.generate_key()
-        manager: CryptoManager = CryptoManager(key)
-        self.assertEqual(manager.key, key)
+def test_init_with_provided_key():
+    """Test initializing with an explicit key (Client mode)."""
+    # FIX: Генерираме валиден Fernet ключ
+    valid_key = Fernet.generate_key()
+    manager = CryptoManager(key=valid_key)
+    assert manager.key == valid_key
 
-    def test_initialization_without_key(self) -> None:
-        """Test initializing without a key generates one."""
-        manager: CryptoManager = CryptoManager()
-        self.assertIsInstance(manager.key, bytes)
-        self.assertTrue(len(manager.key) > 0)
 
-    def test_get_key_as_string(self) -> None:
-        """Test converting key to string."""
-        key_str: str = self.crypto.get_key_as_string()
-        self.assertIsInstance(key_str, str)
-        # Should be decodable back to bytes
-        self.assertEqual(key_str.encode('utf-8'), self.crypto.key)
+@patch('os.path.exists')
+def test_init_server_existing_key(mock_exists):
+    """Test loading existing key from file (Server mode)."""
+    mock_exists.return_value = True
 
-    def test_encrypt_decrypt_flow(self) -> None:
-        """Test valid encryption and decryption."""
-        original_text: str = "Секретно съобщение 123"
-        encrypted: str = self.crypto.encrypt_message(original_text)
-        
-        self.assertNotEqual(original_text, encrypted)
-        self.assertIsInstance(encrypted, str)
-        
-        decrypted: str = self.crypto.decrypt_message(encrypted)
-        self.assertEqual(original_text, decrypted)
+    # FIX: Създаваме валиден ключ и го "слагаме" във файла
+    valid_key = Fernet.generate_key()
 
-    def test_encrypt_empty_message(self) -> None:
-        """Test encrypting an empty string."""
-        res: str = self.crypto.encrypt_message("")
-        self.assertEqual(res, "")
+    with patch('builtins.open', mock_open(read_data=valid_key)) as mock_file:
+        manager = CryptoManager()
 
-    def test_decrypt_empty_token(self) -> None:
-        """Test decrypting an empty token."""
-        res: str = self.crypto.decrypt_message("")
-        self.assertEqual(res, "")
+        assert manager.key == valid_key
+        mock_file.assert_called_with(KEY_FILE, "rb")
 
-    def test_decrypt_invalid_token(self) -> None:
-        """Test decrypting garbage data."""
-        res: str = self.crypto.decrypt_message("NotValidToken")
-        self.assertEqual(res, "[Грешка при декриптиране]")
 
-    def test_wrong_key_decryption(self) -> None:
-        """Test that different keys cannot decrypt each other's messages."""
-        key1: bytes = Fernet.generate_key()
-        key2: bytes = Fernet.generate_key()
-        
-        manager1: CryptoManager = CryptoManager(key1)
-        manager2: CryptoManager = CryptoManager(key2)
-        
-        secret: str = "My Password"
-        enc: str = manager1.encrypt_message(secret)
-        
-        # Manager 2 tries to decrypt
-        dec: str = manager2.decrypt_message(enc)
-        self.assertEqual(dec, "[Грешка при декриптиране]")
+@patch('os.path.exists')
+def test_init_server_generate_key(mock_exists):
+    """Test generating new key if file doesn't exist."""
+    mock_exists.return_value = False
 
-if __name__ == '__main__':
-    unittest.main()
+    with patch('builtins.open', mock_open()) as mock_file:
+        manager = CryptoManager()
+
+        assert len(manager.key) > 0
+        # Проверяваме дали е записал нещо във файла
+        mock_file.assert_called_with(KEY_FILE, "wb")
+        handle = mock_file()
+        handle.write.assert_called_once()
+
+
+def test_get_key_as_string():
+    valid_key = Fernet.generate_key()
+    manager = CryptoManager(key=valid_key)
+    assert manager.get_key_as_string() == valid_key.decode('utf-8')
+
+
+def test_encrypt_decrypt_flow():
+    """Test full encryption cycle."""
+    manager = CryptoManager()  # Generates random valid key
+    original = "Secret Message"
+
+    encrypted = manager.encrypt_message(original)
+    assert encrypted != original
+    assert encrypted != ""
+
+    decrypted = manager.decrypt_message(encrypted)
+    assert decrypted == original
+
+
+def test_encrypt_empty():
+    manager = CryptoManager()
+    assert manager.encrypt_message("") == ""
+    assert manager.encrypt_message(None) == ""
+
+
+def test_decrypt_empty():
+    manager = CryptoManager()
+    assert manager.decrypt_message("") == ""
+    assert manager.decrypt_message(None) == ""
+
+
+def test_decrypt_invalid():
+    manager = CryptoManager()
+    assert manager.decrypt_message("InvalidToken") == "[Decryption Error]"

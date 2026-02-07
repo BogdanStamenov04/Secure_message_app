@@ -16,7 +16,7 @@ __pycache__/
 .history/
 
 # Data
-data/users.db
+data/data.db
 
 # Docs
 Спецификация на проект по _Програмиране с Python_.pdf

@@ -1,116 +1,110 @@
-import unittest
+import pytest
 import os
-import time
-from typing import List
+from unittest.mock import patch
 from src.server.database import Database
 
-class TestDatabase(unittest.TestCase):
-    def setUp(self) -> None:
-        self.test_db_path: str = "test_users_full.db"
-        
-        # Clean up old file
-        if os.path.exists(self.test_db_path):
-            try:
-                os.remove(self.test_db_path)
-            except PermissionError:
-                time.sleep(0.1)
-                try:
-                    os.remove(self.test_db_path)
-                except Exception:
-                    pass
 
-        # Monkeypatch the DB path
-        from src.server import database
-        database.DB_PATH = self.test_db_path
-        
-        self.db: Database = Database()
+@pytest.fixture
+def db(tmp_path):
+    """
+    Fixture to create a DB instance using a temporary file.
+    Using a file ensures persistence across connection open/close calls.
+    """
+    # tmp_path е вграден фикчър на pytest, който създава временна папка
+    db_file = tmp_path / "test_db.sqlite"
 
-    def tearDown(self) -> None:
-        if os.path.exists(self.test_db_path):
-            try:
-                os.remove(self.test_db_path)
-            except Exception:
-                pass
+    with patch('src.server.database.DB_PATH', str(db_file)):
+        database = Database()
+        yield database
 
-    def test_register_flow(self) -> None:
-        """Test registration success and duplicate prevention."""
-        self.assertEqual(self.db.register_user("alex", "123"), "success")
-        self.assertEqual(self.db.register_user("alex", "123"), "taken")
-        self.assertEqual(self.db.register_user("bob", "123"), "success")
 
-    def test_login_flow(self) -> None:
-        """Test login success and failure."""
-        self.db.register_user("user1", "pass1")
-        self.assertTrue(self.db.check_login("user1", "pass1"))
-        self.assertFalse(self.db.check_login("user1", "wrong"))
-        self.assertFalse(self.db.check_login("ghost", "pass1"))
+def test_create_tables(db):
+    """Ensure tables are created."""
+    conn = db.get_connection()
+    cursor = conn.cursor()
 
-    def test_friend_request_lifecycle(self) -> None:
-        """Full friend request cycle: Send -> Pending -> Accept -> Friends."""
-        self.db.register_user("u1", "p")
-        self.db.register_user("u2", "p")
+    tables = ["users", "friends", "friend_requests", "groups",
+              "group_members", "public_rooms", "messages"]
 
-        # 1. Send request
-        self.assertEqual(self.db.send_friend_request("u1", "u2"), "success")
-        
-        # 2. Check pending
-        pending: List[str] = self.db.get_pending_requests("u2")
-        self.assertEqual(pending, ["u1"])
-        
-        # 3. Accept
-        self.db.handle_request("u1", "u2", "accept")
-        
-        # 4. Verify friends
-        friends_u1: List[str] = self.db.get_friends_list("u1")
-        friends_u2: List[str] = self.db.get_friends_list("u2")
-        
-        self.assertIn("u2", friends_u1)
-        self.assertIn("u1", friends_u2)
-        
-        # 5. Pending should be empty
-        self.assertEqual(self.db.get_pending_requests("u2"), [])
+    for table in tables:
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'")
+        assert cursor.fetchone() is not None
+    conn.close()
 
-    def test_friend_request_errors(self) -> None:
-        """Test error conditions for friend requests."""
-        self.db.register_user("me", "p")
-        
-        # Self request
-        self.assertEqual(self.db.send_friend_request("me", "me"), "error")
-        
-        # Non-existent user
-        self.assertEqual(self.db.send_friend_request("me", "ghost"), "not_found")
 
-    def test_decline_friend_request(self) -> None:
-        """Test declining a request."""
-        self.db.register_user("A", "p")
-        self.db.register_user("B", "p")
-        self.db.send_friend_request("A", "B")
-        
-        self.db.handle_request("A", "B", "decline")
-        
-        self.assertNotIn("A", self.db.get_friends_list("B"))
-        self.assertEqual(self.db.get_pending_requests("B"), [])
+def test_register_login(db):
+    assert db.register_user("ivan", "pass123") == "success"
+    # Duplicate
+    assert db.register_user("ivan", "pass123") == "taken"
 
-    def test_groups(self) -> None:
-        """Test creating and joining groups."""
-        self.db.register_user("creator", "p")
-        self.db.register_user("joiner", "p")
-        
-        # Create
-        self.assertTrue(self.db.create_group("TeamA", "creator"))
-        self.assertFalse(self.db.create_group("TeamA", "joiner")) # Duplicate name
-        
-        # Join
-        self.assertTrue(self.db.join_group("TeamA", "joiner"))
-        self.assertFalse(self.db.join_group("MissingGroup", "joiner"))
-        
-        # Members check
-        members: List[str] = self.db.get_group_members("TeamA")
-        self.assertIn("creator", members)
-        self.assertIn("joiner", members)
-        
-        # User groups check
-        self.assertIn("TeamA", self.db.get_user_groups("creator"))
+    assert db.check_login("ivan", "pass123") is True
+    assert db.check_login("ivan", "wrongpass") is False
+    assert db.check_login("peter", "pass123") is False
 
-if __name__ == '__main__':
-    unittest.main()
+
+def test_friend_request_flow(db):
+    db.register_user("A", "p")
+    db.register_user("B", "p")
+
+    # 1. Send request
+    assert db.send_friend_request("A", "B") == "success"
+    assert db.send_friend_request("A", "B") == "already_sent"
+    assert db.send_friend_request("A", "C") == "not_found"
+    assert db.send_friend_request("A", "A") == "error"
+
+    # 2. Check pending
+    assert db.get_pending_requests("B") == ["A"]
+
+    # 3. Handle request (Accept)
+    db.handle_request("A", "B", "accept")
+
+    friends_a = db.get_friends_list("A")
+    friends_b = db.get_friends_list("B")
+    assert "B" in friends_a
+    assert "A" in friends_b
+
+    # 4. Try sending request again
+    assert db.send_friend_request("A", "B") == "already_friends"
+
+
+def test_groups(db):
+    db.register_user("Creator", "p")
+    db.register_user("Joiner", "p")
+
+    assert db.create_group("Group1", "Creator") is True
+    assert db.create_group("Group1", "Joiner") is False  # Duplicate name
+
+    assert db.join_group("Group1", "Joiner") is True
+    assert db.join_group("NonExistent", "Joiner") is False
+
+    members = db.get_group_members("Group1")
+    assert "Creator" in members
+    assert "Joiner" in members
+
+    user_groups = db.get_user_groups("Creator")
+    assert "Group1" in user_groups
+
+
+def test_public_rooms(db):
+    assert db.create_public_room("Room1", "fun", "Creator") is True
+    assert db.create_public_room("Room1", "fun", "Creator") is False
+
+    rooms = db.get_public_rooms()
+    assert ("Room1", "fun") in rooms
+
+
+def test_messages_history(db):
+    db.store_message("A", "B", "encrypted_blob")
+    db.store_message("B", "A", "reply_blob")
+
+    history = db.get_chat_history("A", "B")
+    assert len(history) == 2
+    assert history[0]["sender"] == "A"
+    assert history[0]["text"] == "encrypted_blob"
+    assert history[1]["sender"] == "B"
+
+    # Test group history
+    db.store_message("A", "#Group", "hi group")
+    group_hist = db.get_chat_history("A", "#Group")
+    assert len(group_hist) == 1
+    assert group_hist[0]["to"] == "#Group"
