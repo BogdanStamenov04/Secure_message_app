@@ -39,11 +39,18 @@ ignore_missing_imports = true
 module = "PIL.*"
 ignore_missing_imports = true
 
+# --- COVERAGE НАСТРОЙКИ ---
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "tests/*",
+    "*/__init__.py",
+]
+
 # --- PYTEST НАСТРОЙКИ ---
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["."]
 testpaths = ["tests"]
-addopts = "--cov=src"
 
 # --- PYLINT НАСТРОЙКИ ---
 [tool.pylint.format]
