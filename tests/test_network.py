@@ -71,13 +71,12 @@ def test_listen_loop(client: NetworkClient) -> None:
         {"action": "msg", "sender": "u2", "text": "enc"},
         {"action": "data_update", "active_users": ["u2"]},
         {"action": "history_response", "target": "u2", "messages": [{"text": "enc_hist"}]},
-        None  # Stop loop
+        None  
     ]
 
     with patch('src.client.network.receive_json', side_effect=incoming):
         client.listen()
 
-        # Използваме cast(Mock, ...), за да проверим assert_called
         cast(Mock, client.on_msg).assert_called()
         cast(Mock, client.on_data).assert_called()
         cast(Mock, client.on_history).assert_called()

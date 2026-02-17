@@ -34,7 +34,7 @@ def test_handle_client_register(server: ChatServer) -> None:
 
     with patch('src.server.server_main.receive_json', side_effect=[req, None]):
         with patch('src.server.server_main.send_json') as mock_send:
-            # FIX: Използваме cast, за да кажем на mypy, че това е Mock
+            
             cast(Mock, server.db.register_user).return_value = "success"
 
             server.handle_client(mock_conn, ("ip", 123))
@@ -54,7 +54,7 @@ def test_handle_client_register_empty_fields(server: ChatServer) -> None:
 
             server.handle_client(mock_conn, ("ip", 123))
 
-            # FIX: cast
+            
             cast(Mock, server.db.register_user).assert_not_called()
 
             mock_send.assert_called_with(mock_conn, {
@@ -69,7 +69,7 @@ def test_handle_client_login_success(server: ChatServer) -> None:
 
     with patch('src.server.server_main.receive_json', side_effect=[req, None]):
         with patch('src.server.server_main.send_json') as mock_send:
-            # FIX: cast
+          
             cast(Mock, server.db.check_login).return_value = True
 
             server.handle_client(mock_conn, ("ip", 123))
@@ -87,14 +87,14 @@ def test_handle_client_actions(server: ChatServer) -> None:
         {"action": "msg", "to": "u2", "text": "enc_txt"},
         {"action": "get_history", "target": "u2"},
         {"action": "create_group", "group_name": "g1"},
-        None  # Break loop
+        None  
     ]
 
     server.clients["u2"] = Mock()
 
     with patch('src.server.server_main.receive_json', side_effect=requests):
         with patch('src.server.server_main.send_json'):
-            # FIX: cast за всички DB методи
+            
             cast(Mock, server.db.check_login).return_value = True
 
             server.handle_client(mock_conn, ("ip", 123))

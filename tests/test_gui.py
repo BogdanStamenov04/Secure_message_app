@@ -3,12 +3,10 @@ from unittest.mock import Mock, patch
 from typing import Any, Generator
 from src.client.gui import MessengerApp
 
-# --- FIXTURES & TESTS ---
-
 
 @pytest.fixture
 def app() -> Generator[Any, None, None]:
-    # Мокваме NetworkClient
+
     with patch('src.client.gui.NetworkClient') as MockClientClass:
         mock_client_instance = MockClientClass.return_value
         mock_client_instance.connect.return_value = (True, "OK")
@@ -17,8 +15,6 @@ def app() -> Generator[Any, None, None]:
         application = MessengerApp()
         application.client = mock_client_instance
 
-        # Настройваме UI елементите с Mocks
-        # Трябва да анотираме връщания тип, за да е доволен mypy strict
         def create_mock_entry() -> Mock:
             m = Mock()
             m.get.return_value = ""

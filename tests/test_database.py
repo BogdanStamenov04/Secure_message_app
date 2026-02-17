@@ -33,7 +33,6 @@ def test_create_tables(db: Database) -> None:
 
 def test_register_login(db: Database) -> None:
     assert db.register_user("ivan", "pass123") == "success"
-    # Duplicate
     assert db.register_user("ivan", "pass123") == "taken"
 
     assert db.check_login("ivan", "pass123") is True

@@ -3,15 +3,11 @@ import os
 from unittest.mock import MagicMock, Mock
 from typing import Any
 
-# --- 1. PATH FIX ---
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
-
-# --- 2. GLOBAL MOCKING (GUI & DB) ---
-
-# Mock за CustomTkinter (Графика)
 
 
 class FakeWidget:
@@ -50,7 +46,7 @@ class FakeCTkTabview(FakeWidget):
         return frame
 
 
-# Създаваме GUI моковете
+
 mock_ctk = MagicMock()
 mock_ctk.CTk = FakeCTk
 mock_ctk.CTkFrame = FakeWidget
@@ -64,8 +60,7 @@ mock_ctk.CTkTabview = FakeCTkTabview
 mock_ctk.set_appearance_mode = Mock()
 mock_ctk.set_default_color_theme = Mock()
 
-# --- FIX: SMART DB MOCK ---
-# Този Mock поддържа 'with conn:' (Context Manager Protocol)
+
 
 
 class MockDBConnection(MagicMock):
@@ -77,15 +72,10 @@ class MockDBConnection(MagicMock):
 
 
 mock_sqlite = MagicMock()
-# Когато се извика connect(), връща нашия "умен" Mock, който може да се ползва с `with`
+
 mock_sqlite.connect.return_value = MockDBConnection()
 
-# Инжектираме всичко в системата
+
 sys.modules["customtkinter"] = mock_ctk
 sys.modules["PIL"] = MagicMock()
 sys.modules["PIL.Image"] = MagicMock()
-# ВНИМАНИЕ: Не мокваме sqlite3 глобално тук, за да може test_database.py
-# да си ползва истинска sqlite3 в паметта или файл.
-# Ако сървърът няма sqlite3, тогава ще трябва да го мокнем, но обикновено има.
-# Засега махаме глобалния мок на sqlite3, защото той чупи локалните тестове на базата.
-# Ако на сървъра гърми, ще го върнем, но по-интелигентно.

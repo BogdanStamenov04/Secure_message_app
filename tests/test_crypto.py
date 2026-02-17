@@ -57,10 +57,6 @@ def test_encrypt_decrypt_flow() -> None:
 def test_encrypt_empty() -> None:
     manager = CryptoManager()
     assert manager.encrypt_message("") == ""
-    # FIX: Casting None to ignore type check for test purpose, or just pass empty string
-    # In strict mode, passing None to str argument is an error.
-    # We remove the None test case or satisfy mypy.
-    # Let's keep strict type safety:
     assert manager.encrypt_message("") == ""
 
 
